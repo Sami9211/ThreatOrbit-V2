@@ -4,7 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from models import IOC, FetchResult
+from threat_api.models import IOC, FetchResult
 from fetchers.rss import _fetch_feed, _read_sources
 
 SOCIAL_SOURCES_FILE = "social_sources.txt"

@@ -2,8 +2,8 @@ import uuid
 import json
 from datetime import datetime, timezone
 from typing import List, Dict, Any
-from models import EnrichedIOC
-from config import STIX_IDENTITY_NAME, STIX_IDENTITY_CLASS
+from threat_api.models import EnrichedIOC
+from threat_api.config import STIX_IDENTITY_NAME, STIX_IDENTITY_CLASS
 
 
 def convert_to_stix_bundle(iocs: List[EnrichedIOC]) -> Dict[str, Any]:

@@ -6,28 +6,30 @@ import json
 import os
 import logging
 
-from config import (
-    API_HOST, API_PORT, APP_API_KEY,
+from threat_api.config import (
+    API_HOST, API_PORT, APP_API_KEY, FLASK_DEBUG,
     RATE_LIMIT_PER_MINUTE, ENABLE_SCHEDULER, SCHEDULE_FETCH_CRON_MINUTES,
-    OPENCTI_URL, OPENCTI_API_KEY
+    OPENCTI_URL, OPENCTI_API_KEY, OPENCTI_ENABLED,
+    ENABLE_OTX, ENABLE_ABUSECH, ENABLE_RSS, ENABLE_DARKWEB_OSINT, ENABLE_SOCIAL_OSINT,
+    PIPELINE_MAX_IOCS_PER_SOURCE, PIPELINE_MAX_TOTAL_IOCS, PIPELINE_MAX_ENRICH, BUNDLE_PATH
 )
-from models import EnrichedIOC
-from fetchers.otx import fetch_otx_iocs
-from fetchers.abusech import fetch_abusech_iocs
-from fetchers.rss import fetch_rss_iocs, get_configured_rss_feeds
-from fetchers.darkweb_osint import fetch_darkweb_osint_iocs, get_configured_darkweb_sources
-from fetchers.social_osint import fetch_social_osint_iocs, get_configured_social_sources
-from normalization import normalize_iocs, boost_confidence_by_correlation
-from trust_scoring import load_trust_config, apply_trust_scoring
-from enrichment.virustotal import enrich_iocs
-from stix_converter.converter import convert_to_stix_bundle, save_bundle_to_file
-from rate_limit import SimpleRateLimiter
-from source_health import build_source_health
-from opencti_push import push_stix_to_opencti
-from retention import cleanup_old_iocs
-from metrics import ThreatMetrics
-from scheduler import IntervalScheduler
-from db import init_db
+from threat_api.models import EnrichedIOC
+from threat_api.fetchers.otx import fetch_otx_iocs
+from threat_api.fetchers.abusech import fetch_abusech_iocs
+from threat_api.fetchers.rss import fetch_rss_iocs, get_configured_rss_feeds
+from threat_api.fetchers.darkweb_osint import fetch_darkweb_osint_iocs, get_configured_darkweb_sources
+from threat_api.fetchers.social_osint import fetch_social_osint_iocs, get_configured_social_sources
+from threat_api.normalization import normalize_iocs, boost_confidence_by_correlation
+from threat_api.trust_scoring import load_trust_config, apply_trust_scoring
+from threat_api.enrichment.virustotal import enrich_iocs
+from threat_api.stix_converter.converter import convert_to_stix_bundle, save_bundle_to_file
+from threat_api.rate_limit import SimpleRateLimiter
+from threat_api.source_health import build_source_health
+from threat_api.opencti_push import push_stix_to_opencti
+from threat_api.retention import cleanup_old_iocs
+from threat_api.metrics import ThreatMetrics
+from threat_api.scheduler import IntervalScheduler
+from threat_api.db import init_db, upsert_iocs
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -40,7 +42,6 @@ _store = []
 _last_fetch = None
 _last_source_health = {}
 _fetch_in_progress = False
-BUNDLE_PATH = "stix_bundle.json"
 
 
 def require_api_key(fn):
@@ -122,12 +123,12 @@ def fetch():
     enrich = enrich_raw == "true"
 
     try:
-        max_enrich = int(request.args.get("max_enrich", 50))
+        max_enrich = int(request.args.get("max_enrich", min(50, PIPELINE_MAX_ENRICH)))
     except ValueError:
         return jsonify({"error": "max_enrich must be an integer"}), 400
 
-    if max_enrich < 0 or max_enrich > 1000:
-        return jsonify({"error": "max_enrich must be between 0 and 1000"}), 400
+    if max_enrich < 0 or max_enrich > PIPELINE_MAX_ENRICH:
+        return jsonify({"error": f"max_enrich must be between 0 and {PIPELINE_MAX_ENRICH}"}), 400
 
     job_id = str(uuid.uuid4())
     try:
@@ -161,7 +162,7 @@ def iocs():
     if malicious_only:
         results = [i for i in results if (i.vt_malicious_count or 0) > 0]
 
-    sliced = results[offset: offset + limit]
+    sliced = results[offset: offset + max(1, min(limit, 1000))]
     return jsonify([i.model_dump(mode="json") for i in sliced])
 
 
@@ -179,6 +180,9 @@ def export_stix():
 @app.post("/opencti/push")
 @require_api_key
 def opencti_push():
+    if not OPENCTI_ENABLED:
+        return jsonify({"ok": False, "error": "OpenCTI push disabled by config (OPENCTI_ENABLED=false)"}), 400
+
     if not os.path.exists(BUNDLE_PATH):
         return jsonify({"error": "No STIX bundle found. Run /stix/export first."}), 404
 
@@ -189,26 +193,39 @@ def opencti_push():
     return jsonify(result), (200 if result.get("ok") else 400)
 
 
+def _cap(items, n):
+    return items[:max(0, n)]
+
+
 def _run_pipeline(enrich: bool, max_enrich: int):
     global _store, _last_fetch, _last_source_health, _fetch_in_progress
     _fetch_in_progress = True
     try:
-        res_otx = fetch_otx_iocs()
-        res_abuse = fetch_abusech_iocs()
-        res_rss = fetch_rss_iocs()
-        res_dark = fetch_darkweb_osint_iocs()
-        res_social = fetch_social_osint_iocs()
+        res_otx = fetch_otx_iocs() if ENABLE_OTX else _empty_result("otx")
+        res_abuse = fetch_abusech_iocs() if ENABLE_ABUSECH else _empty_result("abusech")
+        res_rss = fetch_rss_iocs() if ENABLE_RSS else _empty_result("rss")
+        res_dark = fetch_darkweb_osint_iocs() if ENABLE_DARKWEB_OSINT else _empty_result("darkweb_osint")
+        res_social = fetch_social_osint_iocs() if ENABLE_SOCIAL_OSINT else _empty_result("social_osint")
 
-        all_iocs = res_otx.iocs + res_abuse.iocs + res_rss.iocs + res_dark.iocs + res_social.iocs
+        all_iocs = (
+            _cap(res_otx.iocs, PIPELINE_MAX_IOCS_PER_SOURCE)
+            + _cap(res_abuse.iocs, PIPELINE_MAX_IOCS_PER_SOURCE)
+            + _cap(res_rss.iocs, PIPELINE_MAX_IOCS_PER_SOURCE)
+            + _cap(res_dark.iocs, PIPELINE_MAX_IOCS_PER_SOURCE)
+            + _cap(res_social.iocs, PIPELINE_MAX_IOCS_PER_SOURCE)
+        )
+        all_iocs = _cap(all_iocs, PIPELINE_MAX_TOTAL_IOCS)
+
         normalized = normalize_iocs(all_iocs)
         trusted = apply_trust_scoring(normalized, load_trust_config())
 
         seen = set()
         dedup = []
         for i in trusted:
-            if i.value in seen:
+            k = (i.ioc_type, i.value, i.source)
+            if k in seen:
                 continue
-            seen.add(i.value)
+            seen.add(k)
             dedup.append(i)
 
         correlated = boost_confidence_by_correlation(dedup)
@@ -223,10 +240,17 @@ def _run_pipeline(enrich: bool, max_enrich: int):
         if enrich:
             enriched = enrich_iocs(correlated, max_enrichments=max_enrich)
         else:
-            enriched = [EnrichedIOC(**i.model_dump(), enrichment_status="skipped", enrichment_error="enrichment disabled")
-                        for i in correlated]
+            enriched = [
+                EnrichedIOC(
+                    **i.model_dump(),
+                    enrichment_status="skipped",
+                    enrichment_error="enrichment disabled"
+                )
+                for i in correlated
+            ]
 
         _store = enriched
+        upsert_iocs(enriched)
         _last_fetch = datetime.now(timezone.utc)
 
         _last_source_health = build_source_health({
@@ -244,7 +268,7 @@ def _scheduled_fetch():
     if _fetch_in_progress:
         return
     try:
-        _run_pipeline(enrich=True, max_enrich=25)
+        _run_pipeline(enrich=True, max_enrich=min(25, PIPELINE_MAX_ENRICH))
         metrics.mark_success(len(_store))
         cleanup_old_iocs(days=30)
     except Exception:
@@ -252,9 +276,14 @@ def _scheduled_fetch():
         metrics.mark_failure()
 
 
+def _empty_result(source_name: str):
+    from threat_api.models import FetchResult
+    return FetchResult(source=source_name, ioc_count=0, iocs=[], fetched_at=datetime.now(timezone.utc), errors=[])
+
+
 if __name__ == "__main__":
     init_db()
-    if ENABLE_SCHEDULER:
+    if ENABLE_SCHEDULER and not FLASK_DEBUG:
         scheduler = IntervalScheduler(SCHEDULE_FETCH_CRON_MINUTES * 60, _scheduled_fetch)
         scheduler.start()
-    app.run(host=API_HOST, port=API_PORT, debug=True)
+    app.run(host=API_HOST, port=API_PORT, debug=FLASK_DEBUG)

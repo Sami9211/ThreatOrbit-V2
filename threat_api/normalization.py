@@ -1,7 +1,7 @@
 from typing import List, Dict
 from urllib.parse import urlparse
 import ipaddress
-from models import IOC
+from threat_api.models import IOC
 
 
 def normalize_iocs(iocs: List[IOC]) -> List[IOC]:
@@ -31,12 +31,14 @@ def normalize_iocs(iocs: List[IOC]) -> List[IOC]:
 
 
 def boost_confidence_by_correlation(iocs: List[IOC]) -> List[IOC]:
-    by_value_sources: Dict[str, set] = {}
+    by_key_sources: Dict[tuple, set] = {}
     for i in iocs:
-        by_value_sources.setdefault(i.value, set()).add(i.source)
+        key = (i.ioc_type, i.value)
+        by_key_sources.setdefault(key, set()).add(i.source)
 
     for i in iocs:
-        source_count = len(by_value_sources.get(i.value, []))
+        key = (i.ioc_type, i.value)
+        source_count = len(by_key_sources.get(key, []))
         if source_count >= 2:
             i.confidence = min(100, i.confidence + 10)
             i.tags = _merge_tags(i.tags, ["multi-source-confirmed"])

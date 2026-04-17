@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from db import get_conn
+from threat_api.db import get_conn
 
 
 def cleanup_old_iocs(days: int = 30):

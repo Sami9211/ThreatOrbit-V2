@@ -2,8 +2,8 @@ import time
 import requests
 from typing import List
 
-from config import VIRUSTOTAL_API_KEY, VT_RATE_LIMIT_SECONDS
-from models import IOC, EnrichedIOC
+from threat_api.config import VIRUSTOTAL_API_KEY, VT_RATE_LIMIT_SECONDS
+from threat_api.models import IOC, EnrichedIOC
 
 
 def enrich_iocs(iocs: List[IOC], max_enrichments: int = 50) -> List[EnrichedIOC]:

@@ -1,9 +1,10 @@
 import json
 import os
 from typing import Dict, Any, List
-from models import IOC
+from threat_api.models import IOC
+from threat_api.config import TRUST_CONFIG_PATH
 
-CONFIG_PATH = "source_trust_config.json"
+CONFIG_PATH = TRUST_CONFIG_PATH
 
 
 def load_trust_config(path: str = CONFIG_PATH) -> Dict[str, Any]:

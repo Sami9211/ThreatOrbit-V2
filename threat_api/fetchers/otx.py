@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 
-from config import OTX_API_KEY, OTX_DAYS_BACK
-from models import IOC, FetchResult
+from threat_api.config import OTX_API_KEY, OTX_DAYS_BACK
+from threat_api.models import IOC, FetchResult
 
 
 def fetch_otx_iocs() -> FetchResult:

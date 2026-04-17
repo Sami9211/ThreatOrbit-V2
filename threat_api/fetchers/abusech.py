@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 
-from config import ABUSECH_URLHAUS_URL, ABUSECH_FEODO_URL
-from models import IOC, FetchResult
+from threat_api.config import ABUSECH_URLHAUS_URL, ABUSECH_FEODO_URL
+from threat_api.models import IOC, FetchResult
 
 
 def fetch_abusech_iocs() -> FetchResult:
