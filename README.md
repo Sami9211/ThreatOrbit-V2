@@ -370,41 +370,9 @@ sh -c "cd threat_api && pytest -q && cd ../log_api && pytest -q"
 - `GET /results/{result_id}/stix`
 
 ---
-## 12) Final Verification Checklist
-
-# 1) Start both APIs in containers
-docker compose up --build -d
-
-# 2) Confirm containers are healthy/running
-docker compose ps
-
-# 3) Threat API health check
-curl http://127.0.0.1:8000/health
-
-# 4) Log API health check
-curl http://127.0.0.1:8001/health
-
-# 5) Threat API fetch pipeline run (replace key)
-curl -X POST "http://127.0.0.1:8000/fetch?enrich=false&max_enrich=10" -H "X-API-Key: YOUR_APP_API_KEY_HERE"
-
-# 6) Confirm Threat API has IOCs
-curl "http://127.0.0.1:8000/iocs?limit=5" -H "X-API-Key: YOUR_APP_API_KEY_HERE"
-
-# 7) Export Threat STIX bundle to file
-curl -X POST "http://127.0.0.1:8000/stix/export" -H "X-API-Key: YOUR_APP_API_KEY_HERE" -o threat_stix_bundle.json
-
-# 8) Run Log API analysis on sample Apache log
-curl -X POST "http://127.0.0.1:8001/analyse?log_format=apache&generate_report=true" -F "file=@log_api/sample_logs/sample_apache.log"
-
-# 9) Confirm report endpoint is serving HTML
-curl -I http://127.0.0.1:8001/report
-
-# 10) Run both test suites
-sh -c "cd threat_api && pytest -q && cd ../log_api && pytest -q"
-```
 
 
-## 13) Troubleshooting
+## 12) Troubleshooting
 
 ## Docker issues
 - Rebuild clean:
@@ -440,7 +408,7 @@ X-API-Key: YOUR_APP_API_KEY_HERE
 
 ---
 
-## 14) Roadmap (Practical next upgrades)
+## 13) Roadmap (Practical next upgrades)
 
 - PostgreSQL backend (production persistence)
 - Direct OpenCTI connector upload flow
