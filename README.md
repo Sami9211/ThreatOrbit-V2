@@ -407,11 +407,3 @@ X-API-Key: YOUR_APP_API_KEY_HERE
 - Retry after 60 seconds or raise limit in config.
 
 ---
-
-## 13) Roadmap (Practical next upgrades)
-
-- PostgreSQL backend (production persistence)
-- Direct OpenCTI connector upload flow
-- Slack/Email alert notifications
-- Analyst feedback loop for false positives
-- Grafana/Prometheus monitoring dashboards
