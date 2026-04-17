@@ -2,7 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
-from models import ParsedLogEntry
+from log_api.models import ParsedLogEntry
 
 KV_RE = re.compile(r'(\w+)=(?:"([^"]*?)"|(\S+))')
 IP_RE = re.compile(r'\b((?:\d{1,3}\.){3}\d{1,3})\b')

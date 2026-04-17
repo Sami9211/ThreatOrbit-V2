@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 from typing import List, Tuple
-from models import ParsedLogEntry
+from log_api.models import ParsedLogEntry
 
 SYSLOG_RE = re.compile(
     r'^(?P<month>\w{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+'

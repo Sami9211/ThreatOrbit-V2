@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import List, Dict, Any
-from models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
-from config import (
+from log_api.models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
+from log_api.config import (
     ML_CONTAMINATION, ML_N_ESTIMATORS,
     BUSINESS_HOURS_START, BUSINESS_HOURS_END,
     SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD, ENABLE_ML_DETECTOR

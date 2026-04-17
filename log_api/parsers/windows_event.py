@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
-from models import ParsedLogEntry
+from log_api.models import ParsedLogEntry
 
 EVENT_ID_MAP: Dict[str, str] = {
     "4624": "Successful Logon",

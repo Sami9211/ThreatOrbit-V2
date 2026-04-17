@@ -1,8 +1,8 @@
 import re
 from collections import defaultdict
 from typing import List, Dict
-from models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
-from config import SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD
+from log_api.models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
+from log_api.config import SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD
 
 SIGNATURES = [
     {

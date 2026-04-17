@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import List, Dict, Tuple
-from models import AnomalyFinding, Severity
+from log_api.models import AnomalyFinding, Severity
 
 
 def process_findings(raw_findings: List[AnomalyFinding]) -> List[AnomalyFinding]:

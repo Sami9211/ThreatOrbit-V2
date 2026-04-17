@@ -1,8 +1,8 @@
 from collections import defaultdict
 from datetime import timedelta
 from typing import List, Dict
-from models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
-from config import (
+from log_api.models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
+from log_api.config import (
     BUSINESS_HOURS_START, BUSINESS_HOURS_END,
     BURST_EVENT_COUNT, BURST_WINDOW_SECONDS,
     SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD

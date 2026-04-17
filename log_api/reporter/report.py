@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from models import AnalysisResult, AnomalyFinding
+from log_api.models import AnalysisResult, AnomalyFinding
 
 SEVERITY_COLORS = {
     "CRITICAL": ("#7f1d1d", "#fca5a5"),

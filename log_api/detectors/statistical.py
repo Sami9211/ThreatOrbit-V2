@@ -2,8 +2,8 @@ import math
 from collections import defaultdict
 from datetime import timedelta
 from typing import List, Dict, Tuple
-from models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
-from config import (
+from log_api.models import ParsedLogEntry, AnomalyFinding, MitreTag, Severity
+from log_api.config import (
     ZSCORE_THRESHOLD, RATE_SPIKE_RPM_THRESHOLD, ERROR_RATE_THRESHOLD_PCT,
     SEVERITY_CRITICAL_THRESHOLD, SEVERITY_HIGH_THRESHOLD, SEVERITY_MEDIUM_THRESHOLD
 )

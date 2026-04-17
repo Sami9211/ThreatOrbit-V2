@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List
-from models import AnalysisResult, AnomalyFinding
+from log_api.models import AnalysisResult, AnomalyFinding
 
 
 def findings_to_stix_bundle(result: AnalysisResult) -> Dict[str, Any]:

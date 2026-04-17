@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 from typing import List, Tuple
-from models import ParsedLogEntry
+from log_api.models import ParsedLogEntry
 
 COMBINED_RE = re.compile(
     r'^(?P<ip>[\d.a-fA-F:]+)\s+'

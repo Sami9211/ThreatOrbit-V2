@@ -7,21 +7,21 @@ from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from config import REPORT_OUTPUT_PATH, SUPPORTED_FORMATS
-from models import LogFormat, AnalysisResult, AnomalyFinding
-from parsers.syslog import parse_syslog
-from parsers.apache import parse_apache
-from parsers.windows_event import parse_windows_event
-from parsers.generic import parse_generic
-from detectors.pattern import run_pattern_detector
-from detectors.statistical import run_statistical_detector
-from detectors.ml_detector import run_ml_detector
-from detectors.temporal import run_temporal_detector
-from alerts.alerter import process_findings, summarise, top_source_ips
-from reporter.report import generate_html_report
-from stix_from_findings import findings_to_stix_bundle
-from metrics import LogMetrics
-from db import init_db, get_conn
+from log_api.config import REPORT_OUTPUT_PATH, SUPPORTED_FORMATS
+from log_api.models import LogFormat, AnalysisResult, AnomalyFinding
+from log_api.parsers.syslog import parse_syslog
+from log_api.parsers.apache import parse_apache
+from log_api.parsers.windows_event import parse_windows_event
+from log_api.parsers.generic import parse_generic
+from log_api.detectors.pattern import run_pattern_detector
+from log_api.detectors.statistical import run_statistical_detector
+from log_api.detectors.ml_detector import run_ml_detector
+from log_api.detectors.temporal import run_temporal_detector
+from log_api.alerts.alerter import process_findings, summarise, top_source_ips
+from log_api.reporter.report import generate_html_report
+from log_api.stix_from_findings import findings_to_stix_bundle
+from log_api.metrics import LogMetrics
+from log_api.db import init_db, get_conn
 
 app = FastAPI(title="Log Anomaly API", version="1.2.0")
 _results = {}
