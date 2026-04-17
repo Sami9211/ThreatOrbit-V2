@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.log
+stix_bundle.json
+anomaly_report.html
