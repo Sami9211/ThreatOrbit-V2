@@ -1,0 +1,46 @@
+from datetime import datetime, timezone
+from typing import List
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from models import IOC, FetchResult
+from fetchers.rss import _fetch_feed, _read_sources
+
+SOCIAL_SOURCES_FILE = "social_sources.txt"
+
+
+def get_configured_social_sources(path: str = SOCIAL_SOURCES_FILE) -> List[str]:
+    return _read_sources(path)
+
+
+def fetch_social_osint_iocs() -> FetchResult:
+    iocs: List[IOC] = []
+    errors: List[str] = []
+    sources = _read_sources(SOCIAL_SOURCES_FILE)
+
+    if not sources:
+        return FetchResult(
+            source="Social OSINT",
+            ioc_count=0,
+            iocs=[],
+            fetched_at=datetime.now(timezone.utc),
+            errors=["No social OSINT sources configured in social_sources.txt"],
+        )
+
+    for src in sources:
+        fiocs, ferrs = _fetch_feed(src, source_prefix="Social OSINT")
+        for i in fiocs:
+            i.threat_type = "malicious-activity"
+            i.tags = (i.tags or []) + ["community-sourced"]
+            i.confidence = min(100, i.confidence + 5)
+        iocs.extend(fiocs)
+        errors.extend(ferrs)
+
+    return FetchResult(
+        source="Social OSINT",
+        ioc_count=len(iocs),
+        iocs=iocs,
+        fetched_at=datetime.now(timezone.utc),
+        errors=errors,
+    )

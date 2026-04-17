@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  threat_api:
+    build:
+      context: ./threat_api
+    container_name: threat_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./threat_api:/app
+    command: python main.py
+
+  log_api:
+    build:
+      context: ./log_api
+    container_name: log_api
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./log_api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload

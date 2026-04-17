@@ -1,0 +1,12 @@
+{
+  "default_weight": 1.0,
+  "default_base_confidence": 50,
+  "sources": {
+    "AlienVault OTX": { "weight": 1.2, "base_confidence": 70 },
+    "abuse.ch": { "weight": 1.25, "base_confidence": 80 },
+    "RSS": { "weight": 1.0, "base_confidence": 55 },
+    "DarkWeb OSINT": { "weight": 0.9, "base_confidence": 50 },
+    "Social OSINT": { "weight": 0.85, "base_confidence": 50 }
+  },
+  "feed_overrides": {}
+}

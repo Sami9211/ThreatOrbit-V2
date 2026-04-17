@@ -1,0 +1,198 @@
+import time
+import uuid
+import os
+from datetime import datetime, timezone
+from typing import List
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from config import REPORT_OUTPUT_PATH, SUPPORTED_FORMATS
+from models import LogFormat, AnalysisResult, AnomalyFinding
+from parsers.syslog import parse_syslog
+from parsers.apache import parse_apache
+from parsers.windows_event import parse_windows_event
+from parsers.generic import parse_generic
+from detectors.pattern import run_pattern_detector
+from detectors.statistical import run_statistical_detector
+from detectors.ml_detector import run_ml_detector
+from detectors.temporal import run_temporal_detector
+from alerts.alerter import process_findings, summarise, top_source_ips
+from reporter.report import generate_html_report
+from stix_from_findings import findings_to_stix_bundle
+from metrics import LogMetrics
+from db import init_db, get_conn
+
+app = FastAPI(title="Log Anomaly API", version="1.2.0")
+_results = {}
+metrics = LogMetrics()
+
+
+@app.on_event("startup")
+def startup():
+    init_db()
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "log_api"}
+
+
+@app.get("/ready")
+def ready():
+    try:
+        with get_conn() as conn:
+            conn.execute("SELECT 1")
+        return {"ready": True}
+    except Exception as e:
+        return {"ready": False, "error": str(e)}
+
+
+@app.get("/metrics")
+def get_metrics():
+    return metrics.to_dict()
+
+
+@app.get("/trends/severity")
+def severity_trends():
+    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    for r in _results.values():
+        for k, v in r.summary.items():
+            buckets[k] = buckets.get(k, 0) + v
+    return {"total_analyses": len(_results), "severity_totals": buckets}
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "Log Anomaly API",
+        "status": "running",
+        "supported_formats": SUPPORTED_FORMATS
+    }
+
+
+@app.post("/analyse", response_model=AnalysisResult)
+async def analyse(
+    file: UploadFile = File(...),
+    log_format: LogFormat = Query(LogFormat.APACHE),
+    generate_report: bool = Query(True)
+):
+    content = await file.read()
+    text = content.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    if not lines:
+        raise HTTPException(status_code=400, detail="File is empty")
+    if len(lines) > 2_000_000:
+        raise HTTPException(status_code=400, detail="File too large for single-run analysis")
+
+    job_id = str(uuid.uuid4())
+    _save_job(job_id, "running", {})
+
+    try:
+        result = _run_analysis(lines, log_format.value, generate_report)
+        _results[job_id] = result
+        _save_job(job_id, "completed", result.summary)
+        metrics.mark_success(len(result.findings))
+        return result
+    except Exception as e:
+        _save_job(job_id, "failed", {"error": str(e)})
+        metrics.mark_failure()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/jobs/{job_id}")
+def job_status(job_id: str):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id,status,created_at,updated_at,summary_json FROM analysis_jobs WHERE id=?",
+            (job_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "id": row[0],
+        "status": row[1],
+        "created_at": row[2],
+        "updated_at": row[3],
+        "summary_json": row[4]
+    }
+
+
+@app.get("/report", response_class=HTMLResponse)
+def report():
+    if not os.path.exists(REPORT_OUTPUT_PATH):
+        raise HTTPException(status_code=404, detail="No report generated yet.")
+    with open(REPORT_OUTPUT_PATH, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/results/{result_id}")
+def get_result(result_id: str):
+    if result_id not in _results:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return _results[result_id]
+
+
+@app.get("/results/{result_id}/stix")
+def export_result_stix(result_id: str):
+    if result_id not in _results:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return JSONResponse(content=findings_to_stix_bundle(_results[result_id]))
+
+
+def _run_analysis(lines: List[str], log_format: str, generate_report: bool) -> AnalysisResult:
+    start = time.time()
+
+    parser = {
+        "syslog": parse_syslog,
+        "apache": parse_apache,
+        "windows_event": parse_windows_event,
+        "generic": parse_generic
+    }.get(log_format, parse_generic)
+
+    entries, parse_errors = parser(lines)
+
+    findings: List[AnomalyFinding] = []
+    findings.extend(run_pattern_detector(entries))
+    findings.extend(run_statistical_detector(entries))
+    findings.extend(run_ml_detector(entries))
+    findings.extend(run_temporal_detector(entries))
+
+    final_findings = process_findings(findings)
+    summary = summarise(final_findings)
+    top_ips = top_source_ips(final_findings)
+
+    result = AnalysisResult(
+        log_format=log_format,
+        total_lines=len(lines),
+        parsed_lines=len(entries),
+        parse_errors=parse_errors,
+        analysis_duration_seconds=round(time.time() - start, 3),
+        findings=final_findings,
+        summary=summary,
+        top_source_ips=top_ips,
+        analysed_at=datetime.now(timezone.utc),
+        detectors_used=["Pattern", "Statistical", "ML", "Temporal"]
+    )
+
+    if generate_report:
+        generate_html_report(result, REPORT_OUTPUT_PATH)
+
+    return result
+
+
+def _save_job(job_id: str, status: str, summary: dict):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        exists = conn.execute("SELECT id FROM analysis_jobs WHERE id=?", (job_id,)).fetchone()
+        if exists:
+            conn.execute(
+                "UPDATE analysis_jobs SET status=?, updated_at=?, summary_json=? WHERE id=?",
+                (status, now, str(summary), job_id)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO analysis_jobs (id,status,created_at,updated_at,summary_json) VALUES (?,?,?,?,?)",
+                (job_id, status, now, now, str(summary))
+            )
+        conn.commit()

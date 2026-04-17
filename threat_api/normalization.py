@@ -1,0 +1,114 @@
+from typing import List, Dict
+from urllib.parse import urlparse
+import ipaddress
+from models import IOC
+
+
+def normalize_iocs(iocs: List[IOC]) -> List[IOC]:
+    normalized = []
+    for ioc in iocs:
+        v = (ioc.value or "").strip()
+        if not v:
+            continue
+
+        if ioc.ioc_type == "domain":
+            v = _normalize_domain(v)
+        elif ioc.ioc_type == "url":
+            v = _normalize_url(v)
+        elif ioc.ioc_type == "hash":
+            v = v.lower()
+        elif ioc.ioc_type == "ip":
+            v = _normalize_ip(v)
+            if not v:
+                continue
+
+        ioc.value = v
+        ioc.tags = _merge_tags(ioc.tags, _infer_tags(ioc))
+        ioc.description = _enrich_description(ioc.description, ioc)
+        normalized.append(ioc)
+
+    return normalized
+
+
+def boost_confidence_by_correlation(iocs: List[IOC]) -> List[IOC]:
+    by_value_sources: Dict[str, set] = {}
+    for i in iocs:
+        by_value_sources.setdefault(i.value, set()).add(i.source)
+
+    for i in iocs:
+        source_count = len(by_value_sources.get(i.value, []))
+        if source_count >= 2:
+            i.confidence = min(100, i.confidence + 10)
+            i.tags = _merge_tags(i.tags, ["multi-source-confirmed"])
+        if source_count >= 3:
+            i.confidence = min(100, i.confidence + 10)
+            i.tags = _merge_tags(i.tags, ["high-correlation"])
+    return iocs
+
+
+def _normalize_domain(domain: str) -> str:
+    d = domain.strip().lower().rstrip(".")
+    if d.startswith("http://") or d.startswith("https://"):
+        d = (urlparse(d).hostname or "").lower()
+    return d
+
+
+def _normalize_url(url: str) -> str:
+    p = urlparse(url if "://" in url else f"http://{url}")
+    scheme = (p.scheme or "http").lower()
+    netloc = (p.netloc or "").lower()
+    path = p.path or "/"
+    query = f"?{p.query}" if p.query else ""
+    if not netloc and p.path:
+        parts = p.path.split("/", 1)
+        host = parts[0].lower()
+        rest = "/" + parts[1] if len(parts) > 1 else "/"
+        return f"{scheme}://{host}{rest}"
+    return f"{scheme}://{netloc}{path}{query}"
+
+
+def _normalize_ip(ip: str) -> str:
+    try:
+        return str(ipaddress.ip_address(ip.strip()))
+    except ValueError:
+        return ""
+
+
+def _infer_tags(ioc: IOC):
+    tags = []
+    val = (ioc.value or "").lower()
+    src = (ioc.source or "").lower()
+
+    if src.startswith("rss"):
+        tags.append("rss-ingested")
+    if "darkweb" in src:
+        tags.append("darkweb-osint")
+    if "social" in src:
+        tags.append("social-osint")
+    if ioc.ioc_type == "url" and any(k in val for k in ["login", "verify", "secure", "wallet"]):
+        tags.append("possible-phishing")
+    return tags
+
+
+def _merge_tags(existing, inferred):
+    out, seen = [], set()
+    for t in (existing or []) + (inferred or []):
+        t = (t or "").strip()
+        if not t:
+            continue
+        k = t.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(t)
+    return out[:20]
+
+
+def _enrich_description(desc, ioc: IOC):
+    base = (desc or "").strip()
+    extra = f"Normalized IOC from source: {ioc.source}."
+    if not base:
+        return extra
+    if extra in base:
+        return base
+    return f"{base} | {extra}"
